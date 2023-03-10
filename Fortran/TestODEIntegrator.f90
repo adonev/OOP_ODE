@@ -5,33 +5,12 @@ program TestODEIntegrator
     use Precision
     use LinearOperator
     use BandedMatrix
+    use ODEIntegrand
     implicit none
-    
-    integer :: n ! Number of ODE variables
-    real(wp), allocatable :: A(:,:)
-    
-    type, extends(BandedMatrix) :: TestType
-        integer :: test_comp
-    contains
-        procedure :: destroy=>TestProc  
-    end type
-            
-    !call TestMatrixRoutines(n=2) ! Tests linear algebra in BandedMatrix class
-    
-    n=2
-    allocate(A(n,n))
-    
-    lambda=1.0_wp ! Non-stiff equation
-    A=A_lambda(n,lambda)
-    
+                    
+    call TestLinearIntegrand(n=2) ! Tests linear algebra in BandedMatrix class
     
 contains
-
-subroutine TestProc(this,comp)
-    class(TestType), intent(inout) :: this
-    this%test_comp=comp
-    call this%BandMat%destroy()
-end subroutine
 
 function A_lambda(n,lambda) result(A)
     integer, intent(in) :: n
@@ -46,17 +25,17 @@ function A_lambda(n,lambda) result(A)
     
 end function
 
-subroutine TestMatrixRoutines(n)
+subroutine TestLinearIntegrand(n)
     integer, intent(in) :: n
  
-    real(wp), dimension(n,n) :: A, test_mat, expA, invA
+    integer :: i
+    real(wp), dimension(n,n) :: A, invA, A_alpha
     real(wp), dimension(n) :: x, b, b_tmp
-    real(wp) :: lambda
+    real(wp) :: lambda, alpha
  
-    type(BandMat) :: band_mat 
+    type(BandMat), target :: jacobian
+    type(RHSFunc) :: rhs 
     
-    band_mat = BandMat(n=n, m=n, n_bands=[-1,1], periodic=.false., id=1)
-
     lambda=1.0_wp           
     A = A_lambda(n,lambda)
     
@@ -66,37 +45,31 @@ subroutine TestMatrixRoutines(n)
     invA(2,1) = 0.125707793940648971e1_wp
     invA(2,2) = 0.455556565221083165e1_wp
     
-    call band_mat%create(n=n)
-    
-    call band_mat%init(matrix=A, tol=1e-6_wp, t=1.0_wp)
+    jacobian = BandMat(n=n, m=n, n_bands=[-1,-1], id=1)
+    call jacobian%create(n=n)
+    call jacobian%init(matrix=A, tol=1e-6_wp, alpha=0.0_wp)
+
+    rhs = RHSFunc(n=n, is_linear=.true., jacobian=jacobian, id=1)
 
     !--------------------
     ! Solvers
-    !--------------------       
-    write(*,*) "Error in inverse = ", band_mat%invA-invA
-    
+    !--------------------           
     call random_number(b)
-    call band_mat%solve(b=b, x=x)
+    call rhs%solve(b=b, x=x)
     write(*,*) "Error in A^(-1)*b = ", x-matmul(invA,b)
-    call band_mat%apply(x=x, b=b_tmp)
-    write(*,*) "Error in residual = ", b-b_tmp
-       
-    !--------------------
-    ! Exponentiation
-    !--------------------       
-    ! From Maple:
-    expA(1,1) = 0.255196124690734960e1_wp
-    expA(1,2) = -0.470422068844958519_wp
-    expA(2,1) = -0.470422068844958519_wp
-    expA(2,2) = 0.138772112224129263e1_wp
+    call rhs%eval(x=x, f=b_tmp)
+    write(*,*) "Error in eval A*x =", b_tmp-matmul(A,x)
+    write(*,*) "Error in residual A*x-b = ", b-b_tmp
 
-    write(*,*) "Error in exponential = ", band_mat%expA-expA
-
-    call random_number(x)
-    call band_mat%exp_t(x=x, b=b)
-    write(*,*) "Error in exp(At)*b = ", b-matmul(expA,x)
-
-    call band_mat%destroy()
+    alpha=1.0_wp ! Try nonzero alpha
+    A_alpha=A
+    do i=1,n
+       A_alpha(i,i)=A(i,i)+alpha
+    end do     
+    call rhs%solve(b=b, x=x, alpha=1.0_wp)
+    call rhs%eval(x=x, f=b_tmp)
+    write(*,*) "Error in eval (alpha*I+A)*x =", b_tmp-matmul(A_alpha,x)
+    write(*,*) "Error in residual = (alpha*I+A)*x-b = ", b-b_tmp
     
 end subroutine       
 
