@@ -14,10 +14,10 @@ class Integrator(object):
         self._dt = dt;
         self._implicitCoeff = 0;
         
-    def InvertImplicitPart(self,b):
+    def InvertImplicitPart(self,b): # Donev: Invert bad word
         return b*self._dt;
         
-    def FactorImplicitPart(self):
+    def FactorImplicitPart(self): # Donev: "factor" is too specific. This stuff should go into LinearOperator's update method
         """
         The matrix to invert can be written as 
         alphaId*I+alphaL*L
@@ -30,7 +30,7 @@ class Integrator(object):
     def XArgumentForExplicit(self,x,xprev):
         return x;
   
-    def Advance(self,x0,StartNum,EndNum,xprev=None):
+    def Advance(self,x0,StartNum,EndNum,xprev=None): # Donev: I would make the argument be nSteps. Internally, the method should keep track of the time step number (i.e., increment by 1 inside the loop)
         x = x0;
         if (xprev is None):
             xprev = x0;
